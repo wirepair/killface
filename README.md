@@ -1,4 +1,4 @@
-[alt text](http://wirepair.github.io/images/frisky-dingo-killface-postcard1.jpg "Vote Killface")
+![alt text](http://wirepair.github.io/images/frisky-dingo-killface-postcard1.jpg "Vote Killface")
 # Killface
 This library is for monitoring processes by name and kills them if they consume more memory than allowed. You can configure it to kill all processes that match the name or only pids that are over the allowed amount.  
 
