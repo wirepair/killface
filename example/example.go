@@ -83,8 +83,12 @@ func main() {
 	// wait for pids to be killed
 	for {
 		select {
-		case pids := <-killer.KilledCh:
-			log.Printf("killed the following pids: %v\n", pids)
+		case pid := <-killer.KilledCh:
+			if pid.Err != nil {
+				log.Printf("Unable to kill %d due to: %s\n", pid.Pid, pid.Err)
+			} else {
+				log.Printf("killed the following pid: %v\n", pid)
+			}
 			killer.Stop()
 			return
 		}

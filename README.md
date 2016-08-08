@@ -1,6 +1,6 @@
 ![alt text](http://wirepair.github.io/images/frisky-dingo-killface-postcard1.jpg "Vote Killface")
 # Killface
-This library is for monitoring processes by name and kills them if they consume more memory than allowed. You can configure it to kill all processes that match the name or only pids that are over the allowed amount.  
+This library is for monitoring processes by name and kills them if they consume more memory than allowed. You can configure it to kill all processes that match the name or only pids that are over the allowed amount. Returns a KillMsg which contains the pid number and possibly an error if we were unable to kill the process. May be called multiple times if killall is set. 
 
 ## Usage
 ```Go
@@ -69,8 +69,12 @@ func main() {
 	// wait for pids to be killed
 	for {
 		select {
-		case pids := <-killer.KilledCh:
-			log.Printf("killed the following pids: %v\n", pids)
+		case pid := <-killer.KilledCh:
+			if pid.Err != nil {
+				log.Printf("Unable to kill %d due to: %s\n", pid.Pid, pid.Err)
+			} else {
+				log.Printf("killed the following pid: %v\n", pid)
+			}
 			killer.Stop()
 			return
 		}

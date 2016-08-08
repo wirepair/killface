@@ -126,7 +126,7 @@ func TestKillReset(t *testing.T) {
 	k.Stop()
 }
 
-func testWaitKill(t *testing.T, killed <-chan []int, done chan<- struct{}) {
+func testWaitKill(t *testing.T, killed <-chan *KillMsg, done chan<- struct{}) {
 	fmt.Printf("killed; %#v\n", <-killed)
 	done <- struct{}{}
 }

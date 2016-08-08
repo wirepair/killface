@@ -39,10 +39,26 @@ func (e *MonitorErr) Error() string {
 	return e.Message
 }
 
+type KillErr struct {
+	Pid     int
+	Message string
+}
+
+func (e *KillErr) Error() string {
+	return fmt.Sprintf("unable to kill pid: %d due to: %s", e.Pid, e.Message)
+}
+
+// a container to hold the pid and their error messages, if any.
+type KillMsg struct {
+	Pid int   // the pid that was killed
+	Err error // if an error occurred, if not, will be nil
+}
+
 // Our process killer object. Notifies implementers of killed processes over the KilledCh.
 //
 type Killer struct {
-	KilledCh     chan []int            // a channel that notifies caller of the processes that were killed
+	KilledCh     chan *KillMsg         // a channel that notifies caller of the processes that were killed
+	ErrKillCh    chan error            // a channel that notifies caller that there was an error killing processes
 	settings     *Settings             // how this killer object is configured
 	systemMemory uint64                // how much system memory exists
 	pids         map[int]time.Duration // our current pid list
@@ -60,14 +76,15 @@ func NewKiller(settings *Settings) *Killer {
 // Resets the Killer properties, assumes Stop has already been called
 func (k *Killer) Reset() {
 	k.pids = make(map[int]time.Duration)
-	k.KilledCh = make(chan []int)
+	k.KilledCh = make(chan *KillMsg)
 	k.ticker = time.NewTicker(k.settings.interval)
 	k.done = make(chan struct{})
 }
 
 // Monitors processes to see if they go over a certain memory threshold
-// greater than allowed time. If they do, we kill them and send the pid
-// values over the KilledCh.
+// greater than allowed time. If they do, we kill them and send KillMsgs
+// (one per pid killed) over the KilledCh. If there was an error killing
+// the pid, it is filled into the KillMsg.Err property.
 func (k *Killer) Monitor() error {
 	var err error
 
@@ -88,10 +105,12 @@ func (k *Killer) Monitor() error {
 				return err
 			}
 			k.debugf("refreshed pids %v\n", k.pids)
-			pids := k.killCheck(k.pids)
-			if len(pids) > 0 {
-				k.debugf("killing pids: %v\n", pids)
-				k.KilledCh <- pids
+			msgs := k.killCheck(k.pids)
+			if len(msgs) > 0 {
+				k.debugf("killing pids: %v\n", msgs)
+				for _, msg := range msgs {
+					k.KilledCh <- msg
+				}
 			}
 		case <-k.done:
 			return nil
@@ -111,10 +130,11 @@ func (k *Killer) Stop() {
 
 // Refreshes our pid list, updates and checks if any have exceeded threshold for > allowedTime
 // then kills either all the pids found (if settings.killAll) or just kills the exceeded ones.
-func (k *Killer) killCheck(pids map[int]time.Duration) []int {
+func (k *Killer) killCheck(pids map[int]time.Duration) []*KillMsg {
+	msgs := make([]*KillMsg, 0)
 	exceeded := k.checkExceeded(pids)
 	if len(exceeded) == 0 {
-		return exceeded // return an empty array
+		return msgs // return an empty slice
 	}
 
 	pidsToKill := make([]int, len(pids))
@@ -130,13 +150,16 @@ func (k *Killer) killCheck(pids map[int]time.Duration) []int {
 	}
 
 	for _, pid := range pidsToKill {
+		msg := &KillMsg{Pid: pid}
 		err := k.kill(pid)
 		if err != nil {
 			k.debugf("error killing process: %d, %s", pid, err)
+			msg.Err = err
 		}
+		msgs = append(msgs, msg)
 	}
 
-	return pidsToKill
+	return msgs
 }
 
 // Kills the pid provided it still exists
